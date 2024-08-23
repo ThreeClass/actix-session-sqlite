@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "select changes() as \"foo!:u32\" from sessions",
+  "describe": {
+    "columns": [
+      {
+        "name": "foo!:u32",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f677d2282bdfff6fd1c08df03e423e2d93e48a473dc0892a7fee85871d0ca166"
+}

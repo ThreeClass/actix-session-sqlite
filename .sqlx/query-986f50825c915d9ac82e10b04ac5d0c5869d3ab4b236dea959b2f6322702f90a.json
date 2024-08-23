@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "select id as \"id!: Uuid\", expires, created,data from sessions where id=$1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "expires",
+        "ordinal": 1,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "created",
+        "ordinal": 2,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "data",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "986f50825c915d9ac82e10b04ac5d0c5869d3ab4b236dea959b2f6322702f90a"
+}

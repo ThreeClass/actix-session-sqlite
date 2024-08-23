@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into sessions (id, created, expires, data) values ($1, $2, $3, $4) returning id as \"id!: Uuid\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "baeea652312db460ff98b77890dcf2f66afd8e95f32d970f7751f1dc96c5c8d6"
+}
