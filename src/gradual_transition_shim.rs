@@ -8,7 +8,7 @@ pub struct CookieToSqliteSessionStoreShim {
 	secondary: CookieSessionStore
 }
 impl CookieToSqliteSessionStoreShim {
-	fn new(sqlite: SqliteSessionStore, cookie: CookieSessionStore) -> Self {
+	pub fn new(sqlite: SqliteSessionStore, cookie: CookieSessionStore) -> Self {
 		CookieToSqliteSessionStoreShim {
 			primary: sqlite,
 			secondary: cookie
