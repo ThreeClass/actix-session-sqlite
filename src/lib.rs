@@ -1,24 +1,21 @@
 mod gradual_transition_shim;
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::From;
+use std::str::FromStr;
 use actix_session::storage::{LoadError, SaveError, SessionKey, SessionStore, UpdateError};
 use actix_web::cookie::time::{Duration};
 use anyhow::{Error};
-use chrono::{DateTime, NaiveDateTime, TimeDelta, Utc};
-use sqlx::{query, query_as, query_scalar, Database, Decode, Encode, Sqlite, SqlitePool, Type};
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::sqlite::SqliteArgumentValue::Text;
+use chrono::{NaiveDateTime, TimeDelta, Utc};
+use sqlx::{migrate, query, query_as, query_scalar, SqlitePool};
 use tracing::{info_span, instrument};
 use tracing_futures::Instrument;
-use rand::random;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlx::sqlite::SqliteConnectOptions;
 use uuid::Uuid;
 
 pub type SessionState = HashMap<String, String>;
+pub(crate) type StoreSessionKey = Uuid;
 pub struct SqliteSessionStore (pub SqlitePool);
 
 struct DbSessionRow {
@@ -44,14 +41,21 @@ impl SqliteSessionStore {
 		t.commit().await?;
 		Ok(result)
 	}
+
+	//Recommended: sqlite:///var/lib/service/session.db?mode=rwc
+	async fn open_with_path(path: &str) -> Result<Self, Error> {
+		let pool = SqlitePool::connect_with(SqliteConnectOptions::from_str(path)?).await?;
+		migrate!().run(&pool).await?;
+		Ok(Self(pool))
+	}
 }
 
 impl SessionStore for SqliteSessionStore {
 	#[instrument(skip(self), err)]
 	async fn load(&self, session_key: &SessionKey) -> Result<Option<SessionState>, LoadError> {
-		let key= Uuid::parse_str(session_key.as_ref()).map_err(|e| LoadError::Other(Error::from(e)))?;
+		let key= StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| LoadError::Other(Error::from(e)))?;
 		let mut t = self.0.begin().instrument(info_span!("Connecting to DB")).await.map_err(|e| LoadError::Other(Error::from(e)))?;
-		let row = query_as!(DbSessionRow, r#"select id as "id!: Uuid", expires, created,data from sessions where id=$1"#, key).fetch_optional(&mut *t)
+		let row = query_as!(DbSessionRow, r#"select id as "id!: Uuid", expires, created, data as "data: Value" from sessions where id=$1"#, key).fetch_optional(&mut *t)
 			.instrument(info_span!("Querying data"))
 			.await.map_err(|e|  LoadError::Other(Error::from(e)))?;
 		if row.as_ref().is_some_and(|x| x.expires < Utc::now().naive_utc()) {
@@ -80,7 +84,7 @@ impl SessionStore for SqliteSessionStore {
 
 	#[instrument(skip(self), err)]
 	async fn update(&self, session_key: SessionKey, session_state:SessionState, ttl: &Duration) -> Result<SessionKey, UpdateError> {
-		let key = Uuid::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
+		let key = StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
 		let value = serde_json::to_value(session_state).map_err(|e| UpdateError::Serialization(Error::from(e)))?;
 		let expires =  Utc::now() + convert_duration(ttl);
 		query!("update sessions set data=$2, expires=$3 where id=$1", key, value, expires).execute(&self.0).await
@@ -91,7 +95,7 @@ impl SessionStore for SqliteSessionStore {
 
 	#[instrument(skip(self), err)]
 	async fn update_ttl(&self, session_key: &SessionKey, ttl: &Duration) -> Result<(), Error> {
-		let key = Uuid::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
+		let key = StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
 		let expires =  Utc::now() + convert_duration(ttl);
 		query!("update sessions set expires=$2 where id=$1", key, expires).execute(&self.0).await
 			.map_err(|e| UpdateError::Other(Error::from(e)))?;
@@ -101,7 +105,7 @@ impl SessionStore for SqliteSessionStore {
 
 	#[instrument(skip(self), err)]
 	async fn delete(&self, session_key: &SessionKey) -> Result<(), Error> {
-		let key = Uuid::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
+		let key = StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
 		query!("delete from sessions where id=$1", key).execute(&self.0)
 			.await.map_err(|e|  LoadError::Other(Error::from(e)))?;
 		Ok(())
@@ -113,16 +117,13 @@ mod test {
 	use std::collections::HashMap;
 	use actix_session::storage::SessionStore;
 	use actix_web::cookie::time::Duration;
-	use sqlx::{migrate, SqlitePool};
-	use sqlx::sqlite::SqliteConnectOptions;
 	use crate::{SqliteSessionStore, Uuid};
+	
 
 	#[tokio::test]
 	async fn test_one() {
-		let pool = SqlitePool::connect_with(SqliteConnectOptions::new().filename("debug.db")
-			.create_if_missing(true)).await.unwrap();
-		migrate!().run(&pool).await.unwrap();
-		let sess = SqliteSessionStore(pool);
+
+		let sess = SqliteSessionStore::open_with_path(":memory:").await.expect("");
 		
 		let data1 = HashMap::from([("1".to_string(), "loremp".to_string()), ("2".to_string(), "Ipsum".to_string())]);
 
@@ -134,5 +135,7 @@ mod test {
 		println!("{:?}", key2);
 
 		assert_ne!(key1, key2);
+
+		//TODO: test delete, update_ttl,...
 	}
 }
