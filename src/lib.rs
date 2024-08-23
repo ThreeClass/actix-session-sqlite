@@ -1,4 +1,4 @@
-mod gradual_transition_shim;
+pub mod gradual_transition_shim;
 
 use std::collections::HashMap;
 use std::convert::From;
