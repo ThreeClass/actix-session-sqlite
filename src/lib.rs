@@ -16,6 +16,8 @@ use uuid::Uuid;
 
 pub type SessionState = HashMap<String, String>;
 pub(crate) type StoreSessionKey = Uuid;
+
+#[derive(Clone)]
 pub struct SqliteSessionStore (pub SqlitePool);
 
 struct DbSessionRow {
