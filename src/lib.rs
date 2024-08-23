@@ -1,12 +1,11 @@
-#![feature(lazy_cell)]
-
 mod gradual_transition_shim;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::From;
 use actix_session::storage::{LoadError, SaveError, SessionKey, SessionStore, UpdateError};
 use actix_web::cookie::time::{Duration};
-use anyhow::{ Error};
+use anyhow::{Error};
 use chrono::{DateTime, NaiveDateTime, TimeDelta, Utc};
 use sqlx::{query, query_as, query_scalar, Database, Decode, Encode, Sqlite, SqlitePool, Type};
 use sqlx::encode::IsNull;
@@ -17,74 +16,10 @@ use tracing_futures::Instrument;
 use rand::random;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 pub type SessionState = HashMap<String, String>;
 pub struct SqliteSessionStore (pub SqlitePool);
-
-//Effectively uuid but fun!
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct Uuid {
-	#[serde(with = "chrono::serde::ts_milliseconds", rename="t")]
-	timestamp: DateTime<Utc>,
-	#[serde(rename="r")]
-	random: u64
-}
-
-impl Uuid {
-	fn new() -> Uuid {
-		Uuid {
-			timestamp: Utc::now(),
-			random: random()
-		}
-	}
-}
-
-impl TryFrom<&str> for Uuid {
-	type Error = serde_json::Error;
-
-	fn try_from(value: &str) -> Result<Self, Self::Error> {
-		serde_json::from_str(value)
-	}
-}
-
-impl From<Uuid> for String {
-	fn from(val: Uuid) -> Self {
-		serde_json::to_string(&val).expect("")
-	}
-}
-
-impl From<Uuid> for DateTime<Utc> {
-	fn from(value: Uuid) -> Self {
-		value.timestamp
-	}
-}
-
-impl From<Uuid> for SessionKey {
-	fn from(value: Uuid) -> Self {
-		SessionKey::try_from(Into::<String>::into(value)).expect("")
-	}
-}
-
-impl Type<Sqlite> for Uuid {
-	fn type_info() -> <Sqlite as Database>::TypeInfo {
-		<&String as Type<Sqlite>>::type_info()
-	}
-}
-
-impl<'q> Encode<'q, Sqlite> for Uuid {
-	fn encode_by_ref(&self, buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>) -> Result<IsNull, BoxDynError> {
-		let encoded: String = (*self).into();
-		buf.push(Text(encoded.into()));
-		Ok(IsNull::No)
-	}
-}
-
-impl<'r> Decode<'r, Sqlite> for Uuid {
-	fn decode(value: <Sqlite as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-		let value = <&str as Decode<Sqlite>>::decode(value)?;
-		Uuid::try_from(value).map_err(|e| BoxDynError::from(e))
-	}
-}
 
 struct DbSessionRow {
 	#[allow(dead_code)]
@@ -114,7 +49,7 @@ impl SqliteSessionStore {
 impl SessionStore for SqliteSessionStore {
 	#[instrument(skip(self), err)]
 	async fn load(&self, session_key: &SessionKey) -> Result<Option<SessionState>, LoadError> {
-		let key= Uuid::try_from(session_key.as_ref()).map_err(|e| LoadError::Other(Error::from(e)))?;
+		let key= Uuid::parse_str(session_key.as_ref()).map_err(|e| LoadError::Other(Error::from(e)))?;
 		let mut t = self.0.begin().instrument(info_span!("Connecting to DB")).await.map_err(|e| LoadError::Other(Error::from(e)))?;
 		let row = query_as!(DbSessionRow, r#"select id as "id!: Uuid", expires, created,data from sessions where id=$1"#, key).fetch_optional(&mut *t)
 			.instrument(info_span!("Querying data"))
@@ -133,14 +68,14 @@ impl SessionStore for SqliteSessionStore {
 	#[instrument(skip(self), err)]
 	async fn save(&self, session_state: SessionState, ttl: &Duration) -> Result<SessionKey, SaveError> {
 		let value = serde_json::to_value(session_state).map_err(|e| SaveError::Serialization(Error::from(e)))?;
-		let new_key = Uuid::new();
+		let new_key = Uuid::now_v7();
 		let now = Utc::now();
 		let expires = now + convert_duration(ttl);
 		let id = query_scalar!(r#"insert into sessions (id, created, expires, data) values ($1, $2, $3, $4) returning id as "id!: Uuid""#,
 			new_key, now, expires, value)
 			.fetch_one(&self.0)
 			.await.map_err(|e|  SaveError::Other(Error::from(e)))?;
-		Ok(id.into())
+		Ok(id.hyphenated().to_string().try_into().expect(""))
 	}
 
 	#[instrument(skip(self), err)]
@@ -178,7 +113,6 @@ mod test {
 	use std::collections::HashMap;
 	use actix_session::storage::SessionStore;
 	use actix_web::cookie::time::Duration;
-	use chrono::{DateTime, Utc};
 	use sqlx::{migrate, SqlitePool};
 	use sqlx::sqlite::SqliteConnectOptions;
 	use crate::{SqliteSessionStore, Uuid};
@@ -196,7 +130,7 @@ mod test {
 		println!("{:?}", key1);
 		let key2 = sess.save(data1, &Duration::hours(1)).await.unwrap();
 
-		println!("{}", Into::<DateTime<Utc>>::into(Uuid::try_from(key2.as_ref()).expect("")));
+		println!("{:?}", Uuid::parse_str(key1.as_ref()).expect("").get_timestamp());
 		println!("{:?}", key2);
 
 		assert_ne!(key1, key2);

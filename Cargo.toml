@@ -19,10 +19,11 @@ serde_json = "1.0"
 actix-web = "4"
 actix-session = { version = "0.10.0", features = ["cookie-session"] }
 
-sqlx = {version = "0.8.0", features = ["runtime-tokio", "sqlite", "macros", "chrono", "json", "tls-rustls", "migrate"]}
+sqlx = {version = "0.8.0", features = ["runtime-tokio", "sqlite", "macros", "chrono", "json", "uuid", "tls-rustls", "migrate"]}
 
 tracing-futures = "0.2.5"
 tokio = { version = "1.39.3", features = ["rt", "rt-multi-thread", "macros"] }
 rand = "0.8.5"
 base64 = "0.22.1"
 hex = "0.4.3"
+uuid = { version = "1.10.0", features = ["v7"] }
