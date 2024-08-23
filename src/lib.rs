@@ -34,7 +34,7 @@ fn convert_duration(duration: &Duration) -> TimeDelta {
 
 impl SqliteSessionStore {
 	#[instrument(skip(self), err)]
-	async fn clean_database(&self ) -> Result<u32, sqlx::Error> {
+	pub async fn clean_database(&self ) -> Result<u32, sqlx::Error> {
 		let mut t = self.0.begin().instrument(info_span!("Connecting to DB")).await?;
 		query!("delete from sessions where strftime('%s', expires) < unixepoch()").execute(&mut *t).instrument(info_span!("Deleting data")).await?;
 		let result = query_scalar!(r#"select changes() as "foo!:u32" from sessions"#).fetch_one(&mut *t).instrument(info_span!("Querying changes")).await?;
@@ -43,7 +43,7 @@ impl SqliteSessionStore {
 	}
 
 	//Recommended: sqlite:///var/lib/service/session.db?mode=rwc
-	async fn open_with_path(path: &str) -> Result<Self, Error> {
+	pub async fn open_with_path(path: &str) -> Result<Self, Error> {
 		let pool = SqlitePool::connect_with(SqliteConnectOptions::from_str(path)?).await?;
 		migrate!().run(&pool).await?;
 		Ok(Self(pool))
