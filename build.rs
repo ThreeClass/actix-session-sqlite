@@ -7,7 +7,6 @@
 */
 
 fn main() {
-
 	let t = env!("CARGO_MANIFEST_DIR");
 	println!("cargo:rustc-env=DATABASE_URL=sqlite:{}/session.db", t);
 }

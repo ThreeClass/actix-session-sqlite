@@ -21,10 +21,8 @@ pub(crate) type StoreSessionKey = Uuid;
 pub struct SqliteSessionStore (pub SqlitePool);
 
 struct DbSessionRow {
-	#[allow(dead_code)]
 	pub id: Uuid,
 	pub expires: NaiveDateTime,
-	#[allow(dead_code)]
 	pub created: NaiveDateTime,
 	pub data: Value
 }
@@ -37,11 +35,13 @@ fn convert_duration(duration: &Duration) -> TimeDelta {
 impl SqliteSessionStore {
 	#[instrument(skip(self), err)]
 	pub async fn clean_database(&self ) -> Result<u32, sqlx::Error> {
+		//TODO: this function fails as `changes()` sometimes returns variable number of rows breaking
+		//Might be due to tran
 		let mut t = self.0.begin().instrument(info_span!("Connecting to DB")).await?;
 		query!("delete from sessions where strftime('%s', expires) < unixepoch()").execute(&mut *t).instrument(info_span!("Deleting data")).await?;
-		let result = query_scalar!(r#"select changes() as "foo!:u32" from sessions"#).fetch_one(&mut *t).instrument(info_span!("Querying changes")).await?;
+		let result = query_scalar!(r#"select changes() as "foo!:u32" from sessions"#).fetch_optional(&mut *t).instrument(info_span!("Querying changes")).await?;
 		t.commit().await?;
-		Ok(result)
+		Ok(result.unwrap_or(0))
 	}
 
 	//Recommended: sqlite:///var/lib/service/session.db?mode=rwc
