@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select id as \"id!: Uuid\", expires, created,data from sessions where id=$1",
+  "query": "select id as \"id!: Uuid\", expires, created, data as \"data: Value\" from sessions where id=$1",
   "describe": {
     "columns": [
       {
@@ -19,7 +19,7 @@
         "type_info": "Datetime"
       },
       {
-        "name": "data",
+        "name": "data: Value",
         "ordinal": 3,
         "type_info": "Text"
       }
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "986f50825c915d9ac82e10b04ac5d0c5869d3ab4b236dea959b2f6322702f90a"
+  "hash": "2e23e2ee3e66116219a35e9aeeee2927e6086ff3b6bd9b976d892f563c94e293"
 }
