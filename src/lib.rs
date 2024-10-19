@@ -33,7 +33,7 @@ fn convert_duration(duration: &Duration) -> TimeDelta {
 }
 
 impl SqliteSessionStore {
-	#[instrument(skip(self), err)]
+	#[instrument(skip(self), err, ret)]
 	pub async fn clean_database(&self ) -> Result<u32, sqlx::Error> {
 		//TODO: this function fails as `changes()` sometimes returns variable number of rows breaking
 		//Might be due to tran
@@ -56,7 +56,7 @@ impl SessionStore for SqliteSessionStore {
 	#[instrument(skip(self), err)]
 	async fn load(&self, session_key: &SessionKey) -> Result<Option<SessionState>, LoadError> {
 		let key= StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| LoadError::Other(Error::from(e)))?;
-		let mut t = self.0.begin().instrument(info_span!("Connecting to DB")).await.map_err(|e| LoadError::Other(Error::from(e)))?;
+		let mut t = self.0.begin().instrument(info_span!("Connecting to session DB")).await.map_err(|e| LoadError::Other(Error::from(e)))?;
 		let row = query_as!(DbSessionRow, r#"select id as "id!: Uuid", expires, created, data as "data: Value" from sessions where id=$1"#, key).fetch_optional(&mut *t)
 			.instrument(info_span!("Querying data"))
 			.await.map_err(|e|  LoadError::Other(Error::from(e)))?;
@@ -97,9 +97,11 @@ impl SessionStore for SqliteSessionStore {
 
 	#[instrument(skip(self), err)]
 	async fn update_ttl(&self, session_key: &SessionKey, ttl: &Duration) -> Result<(), Error> {
-		let key = StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e)))?;
+		let key = info_span!("AAA").in_scope(|| StoreSessionKey::try_from(session_key.as_ref()).map_err(|e| UpdateError::Other(Error::from(e))))?;
 		let expires =  Utc::now() + convert_duration(ttl);
-		query!("update sessions set expires=$2 where id=$1", key, expires).execute(&self.0).await
+		query!("update sessions set expires=$2 where id=$1", key, expires).execute(&self.0)
+			.instrument(info_span!("Updating session record ttl"))
+			.await
 			.map_err(|e| UpdateError::Other(Error::from(e)))?;
 
 		Ok(())
