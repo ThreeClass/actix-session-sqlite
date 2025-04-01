@@ -20,7 +20,7 @@ serde_json = "1.0"
 actix-web = "4"
 actix-session = { version = "0.10.1", features = ["cookie-session"] }
 
-sqlx = {version = "0.8.2", features = ["runtime-tokio", "sqlite", "macros", "chrono", "json", "uuid", "tls-rustls", "migrate"]}
+sqlx = {version = "0.8.2", features = ["runtime-tokio", "sqlite", "macros", "chrono", "json", "uuid", "tls-native-tls", "migrate"]}
 
 tokio = { version = "1.39.3", features = ["rt", "rt-multi-thread", "macros"] }
 uuid = { version = "1.10.0", features = ["v7"] }
